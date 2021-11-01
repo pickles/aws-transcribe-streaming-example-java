@@ -7,8 +7,19 @@ Example Java Application using AWS SDK creating streaming transcriptions via AWS
 This sample code is made available under a modified MIT license. See the LICENSE file.
 
 ## Setup
+Update OpenJFX version in pom.xml
+```
+<dependency>
+   <groupId>org.openjfx</groupId>
+   <artifactId>javafx-controls</artifactId>
+   <version>17.0.1</version>
+</dependency>
+```
 
-**This application builds with Java 8 using JavaFX. It may not build using OpenJDK 11 due to JavaFX being moved to its own library.**
+To run, execute following command:
+```
+mvn javafx:run
+```
 
 This application assumes your credentials are defined in the same way the [Default Credential Provider Chain](https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default)
 requires.
