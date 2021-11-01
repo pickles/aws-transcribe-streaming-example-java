@@ -18,12 +18,15 @@
 package com.amazonaws.transcribestreaming;
 
 import javafx.application.Platform;
+import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.TextArea;
-import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
@@ -35,10 +38,13 @@ import software.amazon.awssdk.services.transcribestreaming.model.TranscriptResul
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+
+import javax.sound.sampled.Mixer;
 
 /**
  * This class primarily controls the GUI for this application. Most of the code relevant to starting and working
@@ -58,10 +64,14 @@ public class WindowController {
     private String finalTranscript = "";
     private Stage primaryStage;
 
+    private List<Mixer> mics;
+    private ChoiceBox<String> micChoiceBox;
+
     public WindowController(Stage primaryStage) {
         client = new TranscribeStreamingClientWrapper();
         synchronousClient = new TranscribeStreamingSynchronousClient(TranscribeStreamingClientWrapper.getClient());
         this.primaryStage = primaryStage;
+        this.mics = AudioUtil.getAvailableMics();
         initializeWindow(primaryStage);
     }
 
@@ -93,30 +103,47 @@ public class WindowController {
         if (inProgressStreamingRequest == null) {
             finalTextArea.clear();
             finalTranscript = "";
+            micChoiceBox.setDisable(true);
             startStopMicButton.setText("Connecting...");
             startStopMicButton.setDisable(true);
             outputTextArea.clear();
             finalTextArea.clear();
             saveButton.setDisable(true);
-            inProgressStreamingRequest = client.startTranscription(getResponseHandlerForWindow(), inputFile);
+
+            if (inputFile != null) {
+                inProgressStreamingRequest = client.startTranscription(
+                    getResponseHandlerForWindow(), inputFile);
+            } else {
+                int index = micChoiceBox.getSelectionModel().getSelectedIndex();
+                inProgressStreamingRequest = client.startTranscription(
+                    getResponseHandlerForWindow(), mics.get(index));
+            }
         }
     }
 
     private void initializeWindow(Stage primaryStage) {
-        GridPane grid = new GridPane();
-        grid.setAlignment(Pos.CENTER);
-        grid.setVgap(10);
-        grid.setHgap(10);
-        grid.setPadding(new Insets(25, 25, 25, 25));
+        VBox parentPane = new VBox();
+        parentPane.setPadding(new Insets(5, 5, 5, 5));
+        parentPane.setSpacing(10);
 
-        Scene scene = new Scene(grid, 500, 600);
+        Scene scene = new Scene(parentPane);
         primaryStage.setScene(scene);
 
+        HBox micPane = new HBox();
+        micPane.setSpacing(10);
+        List<String> micNames = new ArrayList<>();
+        for (Mixer mic : mics) {
+            micNames.add(mic.getMixerInfo().getName());
+        }
+        micChoiceBox = new ChoiceBox<String>(FXCollections.observableArrayList(micNames));
+        micChoiceBox.setValue(micNames.get(0));
+        
         startStopMicButton = new Button();
         startStopMicButton.setText("Start Microphone Transcription");
-        startStopMicButton.setOnAction(__ -> startTranscriptionRequest(null));
-        grid.add(startStopMicButton, 0, 0, 1, 1);
+        startStopMicButton.setOnAction(__ -> {startTranscriptionRequest(null);});
 
+        micPane.getChildren().addAll(micChoiceBox, startStopMicButton);
+        
         fileStreamButton = new Button();
         fileStreamButton.setText("Stream From Audio File"); //TODO: what file types do we support?
         fileStreamButton.setOnAction(__ -> {
@@ -127,30 +154,33 @@ public class WindowController {
                 startFileTranscriptionRequest(inputFile);
             }
         });
-        grid.add(fileStreamButton, 1, 0, 1, 1);
 
         Text inProgressText = new Text("In Progress Transcriptions:");
-        grid.add(inProgressText, 0, 1, 2, 1);
 
         outputTextArea = new TextArea();
         outputTextArea.setWrapText(true);
-        outputTextArea.setEditable(false);
-        grid.add(outputTextArea, 0, 2, 2, 1);
-
+        outputTextArea.setEditable(true);
+ 
         Text finalText = new Text("Final Transcription:");
-        grid.add(finalText, 0, 3, 2, 1);
 
         finalTextArea = new TextArea();
         finalTextArea.setWrapText(true);
-        finalTextArea.setEditable(false);
-        grid.add(finalTextArea, 0, 4, 2, 1);
+        finalTextArea.setEditable(true);
 
         saveButton = new Button();
         saveButton.setDisable(true);
         saveButton.setText("Save Full Transcript");
-        grid.add(saveButton, 0, 5, 2, 1);
 
-
+        parentPane.getChildren().addAll(
+            micPane,
+            fileStreamButton,
+            inProgressText,
+            outputTextArea,
+            finalText,
+            finalTextArea,
+            saveButton);
+        VBox.setVgrow(outputTextArea, Priority.ALWAYS);
+        VBox.setVgrow(finalTextArea, Priority.ALWAYS);
     }
 
     private void stopTranscription() {
@@ -166,6 +196,7 @@ public class WindowController {
                 startStopMicButton.setText("Start Microphone Transcription");
                 startStopMicButton.setOnAction(__ -> startTranscriptionRequest(null));
                 startStopMicButton.setDisable(false);
+                micChoiceBox.setDisable(false);
             }
 
         }

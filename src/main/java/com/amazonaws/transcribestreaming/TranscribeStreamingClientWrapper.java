@@ -35,8 +35,10 @@ import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
+import javax.sound.sampled.Mixer;
 import javax.sound.sampled.TargetDataLine;
 import javax.sound.sampled.UnsupportedAudioFileException;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -97,29 +99,56 @@ public class TranscribeStreamingClientWrapper {
      * @param inputFile optional input file to stream audio from. Will stream from the microphone if this is set to null
      */
     public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, File inputFile) {
+        if (inputFile == null) {
+            throw new IllegalArgumentException("InputFile is null");
+        }
+        
         if (requestStream != null) {
             throw new IllegalStateException("Stream is already open");
         }
+
+        int sampleRate = 16_000; //default
         try {
-            int sampleRate = 16_000; //default
-            if (inputFile != null) {
-                sampleRate = (int) AudioSystem.getAudioInputStream(inputFile).getFormat().getSampleRate();
-                requestStream = new AudioStreamPublisher(getStreamFromFile(inputFile));
-            } else {
-                requestStream = new AudioStreamPublisher(getStreamFromMic());
-            }
-            return client.startStreamTranscription(
+            sampleRate = (int) AudioSystem.getAudioInputStream(inputFile).getFormat().getSampleRate();
+            requestStream = new AudioStreamPublisher(getStreamFromFile(inputFile));
+            return startTranscription(responseHandler, requestStream, sampleRate);
+        } catch (UnsupportedAudioFileException | IOException ex) {
+            CompletableFuture<Void> failedFuture = new CompletableFuture<>();
+            failedFuture.completeExceptionally(ex);
+            return failedFuture;
+        }
+    }
+
+    public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, Mixer mic) {
+        if (mic == null) {
+            throw new IllegalArgumentException("Mic is null");
+        }
+
+        if (requestStream != null) {
+            throw new IllegalStateException("Stream is already open");
+        }
+
+        int sampleRate = 16_000; //default
+        try {
+            requestStream = new AudioStreamPublisher(AudioUtil.getStreamFromMic(mic));
+            return startTranscription(responseHandler, requestStream, sampleRate);
+        } catch (LineUnavailableException ex) {
+            CompletableFuture<Void> failedFuture = new CompletableFuture<>();
+            failedFuture.completeExceptionally(ex);
+            return failedFuture;
+        }
+    }
+
+    public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler,
+        AudioStreamPublisher publisher, int sampleRate) {
+        
+        return client.startStreamTranscription(
                     //Request parameters. Refer to API documentation for details.
                     getRequest(sampleRate),
                     //AudioEvent publisher containing "chunks" of audio data to transcribe
                     requestStream,
                     //Defines what to do with transcripts as they arrive from the service
                     responseHandler);
-        } catch (LineUnavailableException | UnsupportedAudioFileException | IOException ex) {
-            CompletableFuture<Void> failedFuture = new CompletableFuture<>();
-            failedFuture.completeExceptionally(ex);
-            return failedFuture;
-        }
     }
 
     /**
@@ -157,6 +186,7 @@ public class TranscribeStreamingClientWrapper {
      * @return InputStream containing streaming audio from system's microphone
      * @throws LineUnavailableException When a microphone is not detected or isn't properly working
      */
+    @SuppressWarnings("unused")
     private static InputStream getStreamFromMic() throws LineUnavailableException {
 
         // Signed PCM AudioFormat with 16kHz, 16 bit sample size, mono
