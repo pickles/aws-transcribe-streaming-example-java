@@ -26,17 +26,12 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.regions.providers.DefaultAwsRegionProviderChain;
 import software.amazon.awssdk.services.transcribestreaming.TranscribeStreamingAsyncClient;
 import software.amazon.awssdk.services.transcribestreaming.model.AudioStream;
-import software.amazon.awssdk.services.transcribestreaming.model.LanguageCode;
 import software.amazon.awssdk.services.transcribestreaming.model.MediaEncoding;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionRequest;
 
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
-import javax.sound.sampled.TargetDataLine;
 import javax.sound.sampled.UnsupportedAudioFileException;
 
 import java.io.File;
@@ -98,11 +93,16 @@ public class TranscribeStreamingClientWrapper {
      *                        objects as they are received from the streaming service
      * @param inputFile optional input file to stream audio from. Will stream from the microphone if this is set to null
      */
-    public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, File inputFile) {
+    public CompletableFuture<Void> startTranscription(
+        StreamTranscriptionBehavior responseHandler, 
+        File inputFile,
+        String languageCode,
+        boolean showSpeakerLabel
+    ) {
         if (inputFile == null) {
             throw new IllegalArgumentException("InputFile is null");
         }
-        
+
         if (requestStream != null) {
             throw new IllegalStateException("Stream is already open");
         }
@@ -111,7 +111,13 @@ public class TranscribeStreamingClientWrapper {
         try {
             sampleRate = (int) AudioSystem.getAudioInputStream(inputFile).getFormat().getSampleRate();
             requestStream = new AudioStreamPublisher(getStreamFromFile(inputFile));
-            return startTranscription(responseHandler, requestStream, sampleRate);
+            return startTranscription(
+                responseHandler, 
+                requestStream, 
+                sampleRate,
+                languageCode,
+                showSpeakerLabel);
+            
         } catch (UnsupportedAudioFileException | IOException ex) {
             CompletableFuture<Void> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(ex);
@@ -119,7 +125,12 @@ public class TranscribeStreamingClientWrapper {
         }
     }
 
-    public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler, Mixer mic) {
+    public CompletableFuture<Void> startTranscription(
+        StreamTranscriptionBehavior responseHandler,
+        Mixer mic,
+        String languageCode,
+        boolean showSpeakerLabel
+    ) {
         if (mic == null) {
             throw new IllegalArgumentException("Mic is null");
         }
@@ -131,7 +142,13 @@ public class TranscribeStreamingClientWrapper {
         int sampleRate = 16_000; //default
         try {
             requestStream = new AudioStreamPublisher(AudioUtil.getStreamFromMic(mic));
-            return startTranscription(responseHandler, requestStream, sampleRate);
+            return startTranscription(
+                responseHandler, 
+                requestStream, 
+                sampleRate,
+                languageCode,
+                showSpeakerLabel);
+
         } catch (LineUnavailableException ex) {
             CompletableFuture<Void> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(ex);
@@ -139,12 +156,16 @@ public class TranscribeStreamingClientWrapper {
         }
     }
 
-    public CompletableFuture<Void> startTranscription(StreamTranscriptionBehavior responseHandler,
-        AudioStreamPublisher publisher, int sampleRate) {
+    public CompletableFuture<Void> startTranscription(
+        StreamTranscriptionBehavior responseHandler,
+        AudioStreamPublisher publisher, 
+        int sampleRate,
+        String languageCode,
+        boolean showSpeakerLabel) {
         
         return client.startStreamTranscription(
                     //Request parameters. Refer to API documentation for details.
-                    getRequest(sampleRate),
+                    getRequest(sampleRate, languageCode, showSpeakerLabel),
                     //AudioEvent publisher containing "chunks" of audio data to transcribe
                     requestStream,
                     //Defines what to do with transcripts as they arrive from the service
@@ -182,31 +203,6 @@ public class TranscribeStreamingClientWrapper {
     }
 
     /**
-     * Build an input stream from a microphone if one is present.
-     * @return InputStream containing streaming audio from system's microphone
-     * @throws LineUnavailableException When a microphone is not detected or isn't properly working
-     */
-    @SuppressWarnings("unused")
-    private static InputStream getStreamFromMic() throws LineUnavailableException {
-
-        // Signed PCM AudioFormat with 16kHz, 16 bit sample size, mono
-        int sampleRate = 16000;
-        AudioFormat format = new AudioFormat(sampleRate, 16, 1, true, false);
-        DataLine.Info info = new DataLine.Info(TargetDataLine.class, format);
-
-        if (!AudioSystem.isLineSupported(info)) {
-            System.out.println("Line not supported");
-            System.exit(0);
-        }
-
-        TargetDataLine line = (TargetDataLine) AudioSystem.getLine(info);
-        line.open(format);
-        line.start();
-
-        return new AudioInputStream(line);
-    }
-
-    /**
      * Build an input stream from an audio file
      * @param inputFile Name of the file containing audio to transcribe
      * @return InputStream built from reading the file's audio
@@ -223,13 +219,25 @@ public class TranscribeStreamingClientWrapper {
      * Build StartStreamTranscriptionRequestObject containing required parameters to open a streaming transcription
      * request, such as audio sample rate and language spoken in audio
      * @param mediaSampleRateHertz sample rate of the audio to be streamed to the service in Hertz
+     * @param languageCode the source language used in the input audio stream
+     * @param showSpeakerLabel When true, enables speaker identification in your real-time stream.
      * @return StartStreamTranscriptionRequest to be used to open a stream to transcription service
      */
-    private StartStreamTranscriptionRequest getRequest(Integer mediaSampleRateHertz) {
+    private StartStreamTranscriptionRequest getRequest(
+        Integer mediaSampleRateHertz,
+        String languageCode,
+        boolean showSpeakerLabel
+    ) {
+        System.out.println(
+            "Request [MediaSampleRateHertz: " + mediaSampleRateHertz + ", " +
+            "LanguageCode: " + languageCode + ", " +
+            "ShowSpeakerLabel: " + showSpeakerLabel + "]");
+
         return StartStreamTranscriptionRequest.builder()
-                .languageCode(LanguageCode.EN_US.toString())
+                .languageCode(languageCode)
                 .mediaEncoding(MediaEncoding.PCM)
                 .mediaSampleRateHertz(mediaSampleRateHertz)
+                .showSpeakerLabel(showSpeakerLabel)
                 .build();
     }
 

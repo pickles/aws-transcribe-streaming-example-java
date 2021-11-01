@@ -22,6 +22,7 @@ import javafx.collections.FXCollections;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.TextArea;
 import javafx.scene.layout.HBox;
@@ -30,6 +31,7 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import software.amazon.awssdk.services.transcribestreaming.model.Alternative;
 import software.amazon.awssdk.services.transcribestreaming.model.Result;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
@@ -67,6 +69,9 @@ public class WindowController {
     private List<Mixer> mics;
     private ChoiceBox<String> micChoiceBox;
 
+    private ChoiceBox<String> langChoiceBox;
+    private CheckBox showSpeakerCheckBox;
+
     public WindowController(Stage primaryStage) {
         client = new TranscribeStreamingClientWrapper();
         synchronousClient = new TranscribeStreamingSynchronousClient(TranscribeStreamingClientWrapper.getClient());
@@ -103,20 +108,34 @@ public class WindowController {
         if (inProgressStreamingRequest == null) {
             finalTextArea.clear();
             finalTranscript = "";
+            
             micChoiceBox.setDisable(true);
+            langChoiceBox.setDisable(true);
+            showSpeakerCheckBox.setDisable(true);
+
             startStopMicButton.setText("Connecting...");
             startStopMicButton.setDisable(true);
             outputTextArea.clear();
             finalTextArea.clear();
             saveButton.setDisable(true);
 
+            String languageCode = langChoiceBox.getSelectionModel().getSelectedItem();
+            boolean showSpeakerLabel = showSpeakerCheckBox.isSelected();
+
             if (inputFile != null) {
                 inProgressStreamingRequest = client.startTranscription(
-                    getResponseHandlerForWindow(), inputFile);
+                    getResponseHandlerForWindow(),
+                    inputFile,
+                    languageCode,
+                    showSpeakerLabel);
             } else {
                 int index = micChoiceBox.getSelectionModel().getSelectedIndex();
+
                 inProgressStreamingRequest = client.startTranscription(
-                    getResponseHandlerForWindow(), mics.get(index));
+                    getResponseHandlerForWindow(), 
+                    mics.get(index), 
+                    languageCode,
+                    showSpeakerLabel);
             }
         }
     }
@@ -143,6 +162,25 @@ public class WindowController {
         startStopMicButton.setOnAction(__ -> {startTranscriptionRequest(null);});
 
         micPane.getChildren().addAll(micChoiceBox, startStopMicButton);
+
+        HBox streamOptionsPane = new HBox();
+        streamOptionsPane.setSpacing(10);
+        langChoiceBox = new ChoiceBox<>(FXCollections.observableArrayList(
+            "en-US", "en-GB", "en-AU",
+            "es-US",
+            "fr-CA", "fr-FR",
+            "it-IT",
+            "de-DE",
+            "pt-BR",
+            "ja-JP",
+            "ko-KR",
+            "zh-CN"
+        ));
+        langChoiceBox.setValue("en-US");
+
+        showSpeakerCheckBox = new CheckBox("Show Speaker label");
+        showSpeakerCheckBox.setSelected(true);
+        streamOptionsPane.getChildren().addAll(langChoiceBox, showSpeakerCheckBox);
         
         fileStreamButton = new Button();
         fileStreamButton.setText("Stream From Audio File"); //TODO: what file types do we support?
@@ -173,6 +211,7 @@ public class WindowController {
 
         parentPane.getChildren().addAll(
             micPane,
+            streamOptionsPane,
             fileStreamButton,
             inProgressText,
             outputTextArea,
@@ -197,6 +236,8 @@ public class WindowController {
                 startStopMicButton.setOnAction(__ -> startTranscriptionRequest(null));
                 startStopMicButton.setDisable(false);
                 micChoiceBox.setDisable(false);
+                langChoiceBox.setDisable(false);
+                showSpeakerCheckBox.setDisable(false);
             }
 
         }
@@ -239,14 +280,19 @@ public class WindowController {
                     Result firstResult = results.get(0);
                     if (firstResult.alternatives().size() > 0 && !firstResult.alternatives().get(0).transcript().isEmpty()) {
                         String transcript = firstResult.alternatives().get(0).transcript();
+                        // Alternative firstAlternative = firstResult.alternatives().get(0);
+                        // System.out.println(firstAlternative);
+                        // System.out.println("Speaker: " + firstAlternative.items().get(0).speaker());
                         if(!transcript.isEmpty()) {
-                            System.out.println(transcript);
+                            System.out.print(transcript);
                             String displayText;
                             if (!firstResult.isPartial()) {
-                                finalTranscript += transcript + " ";
+                                finalTranscript += transcript + "\n";
                                 displayText = finalTranscript;
+                                System.out.println("(complete)");
                             } else {
                                 displayText = finalTranscript + " " + transcript;
+                                System.out.println("(partial)");
                             }
                             Platform.runLater(() -> {
                                 outputTextArea.setText(displayText);
