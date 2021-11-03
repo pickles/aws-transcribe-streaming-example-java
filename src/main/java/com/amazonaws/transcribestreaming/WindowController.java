@@ -31,18 +31,25 @@ import javafx.scene.layout.VBox;
 import javafx.scene.text.Text;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.services.transcribestreaming.model.Alternative;
 import software.amazon.awssdk.services.transcribestreaming.model.Result;
 import software.amazon.awssdk.services.transcribestreaming.model.StartStreamTranscriptionResponse;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptEvent;
 import software.amazon.awssdk.services.transcribestreaming.model.TranscriptResultStream;
+import software.amazon.awssdk.services.translate.model.TranslateTextResponse;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -71,6 +78,95 @@ public class WindowController {
 
     private ChoiceBox<String> langChoiceBox;
     private CheckBox showSpeakerCheckBox;
+
+    private ChoiceBox<String> translateFromLangChoiceBox;
+    private TextArea translateFromTextArea;
+    private Button translateFlipLanguageButton;
+    private ChoiceBox<String> translateToLangChoiceBox;
+    private TextArea translateToTextArea;
+    private Button translateButton;
+
+    private static SortedMap<String, String> TRANSLATE_LANGUAGE_CODES = new TreeMap<>();
+    static {
+        TRANSLATE_LANGUAGE_CODES.put("Afrikaans", "af");
+        TRANSLATE_LANGUAGE_CODES.put("Albanian", "sq");
+        TRANSLATE_LANGUAGE_CODES.put("Amharic", "am");
+        TRANSLATE_LANGUAGE_CODES.put("Arabic", "ar");
+        TRANSLATE_LANGUAGE_CODES.put("Armenian", "hy");
+        TRANSLATE_LANGUAGE_CODES.put("Azerbaijani", "az");
+        TRANSLATE_LANGUAGE_CODES.put("Bengali", "bn");
+        TRANSLATE_LANGUAGE_CODES.put("Bosnian", "bs");
+        TRANSLATE_LANGUAGE_CODES.put("Bulgarian", "bg");
+        TRANSLATE_LANGUAGE_CODES.put("Catalan", "ca");
+        TRANSLATE_LANGUAGE_CODES.put("Chinese (Simplified)", "zh");
+        TRANSLATE_LANGUAGE_CODES.put("Chinese (Traditional)", "zh-TW");
+        TRANSLATE_LANGUAGE_CODES.put("Croatian", "hr");
+        TRANSLATE_LANGUAGE_CODES.put("Czech", "cs");
+        TRANSLATE_LANGUAGE_CODES.put("Danish", "da");
+        TRANSLATE_LANGUAGE_CODES.put("Dari", "fa-AF");
+        TRANSLATE_LANGUAGE_CODES.put("Dutch", "nl");
+        TRANSLATE_LANGUAGE_CODES.put("English", "en");
+        TRANSLATE_LANGUAGE_CODES.put("Estonian", "et");
+        TRANSLATE_LANGUAGE_CODES.put("Farsi (Persian)", "fa");
+        TRANSLATE_LANGUAGE_CODES.put("Filipino, Tagalog", "tl");
+        TRANSLATE_LANGUAGE_CODES.put("Finnish", "fi");
+        TRANSLATE_LANGUAGE_CODES.put("French", "fr");
+        TRANSLATE_LANGUAGE_CODES.put("French (Canada)", "fr-CA");
+        TRANSLATE_LANGUAGE_CODES.put("Georgian", "ka");
+        TRANSLATE_LANGUAGE_CODES.put("German", "de");
+        TRANSLATE_LANGUAGE_CODES.put("Greek", "el");
+        TRANSLATE_LANGUAGE_CODES.put("Gujarati", "gu");
+        TRANSLATE_LANGUAGE_CODES.put("Haitian Creole", "ht");
+        TRANSLATE_LANGUAGE_CODES.put("Hausa", "ha");
+        TRANSLATE_LANGUAGE_CODES.put("Hebrew", "he");
+        TRANSLATE_LANGUAGE_CODES.put("Hindi", "hi");
+        TRANSLATE_LANGUAGE_CODES.put("Hungarian", "hu");
+        TRANSLATE_LANGUAGE_CODES.put("Icelandic", "is");
+        TRANSLATE_LANGUAGE_CODES.put("Indonesian", "id");
+        TRANSLATE_LANGUAGE_CODES.put("Italian", "it");
+        TRANSLATE_LANGUAGE_CODES.put("Japanese", "ja");
+        TRANSLATE_LANGUAGE_CODES.put("Kannada", "kn");
+        TRANSLATE_LANGUAGE_CODES.put("Kazakh", "kk");
+        TRANSLATE_LANGUAGE_CODES.put("Korean", "ko");
+        TRANSLATE_LANGUAGE_CODES.put("Latvian", "lv");
+        TRANSLATE_LANGUAGE_CODES.put("Lithuanian", "lt");
+        TRANSLATE_LANGUAGE_CODES.put("Macedonian", "mk");
+        TRANSLATE_LANGUAGE_CODES.put("Malay", "ms");
+        TRANSLATE_LANGUAGE_CODES.put("Malayalam", "ml");
+        TRANSLATE_LANGUAGE_CODES.put("Maltese", "mt");
+        TRANSLATE_LANGUAGE_CODES.put("Mongolian", "mn");
+        TRANSLATE_LANGUAGE_CODES.put("Norwegian", "no");
+        TRANSLATE_LANGUAGE_CODES.put("Pashto", "ps");
+        TRANSLATE_LANGUAGE_CODES.put("Polish", "pl");
+        TRANSLATE_LANGUAGE_CODES.put("Portuguese", "pt");
+        TRANSLATE_LANGUAGE_CODES.put("Romanian", "ro");
+        TRANSLATE_LANGUAGE_CODES.put("Russian", "ru");
+        TRANSLATE_LANGUAGE_CODES.put("Serbian", "sr");
+        TRANSLATE_LANGUAGE_CODES.put("Sinhala", "si");
+        TRANSLATE_LANGUAGE_CODES.put("Slovak", "sk");
+        TRANSLATE_LANGUAGE_CODES.put("Slovenian", "sl");
+        TRANSLATE_LANGUAGE_CODES.put("Somali", "so");
+        TRANSLATE_LANGUAGE_CODES.put("Spanish", "es");
+        TRANSLATE_LANGUAGE_CODES.put("Spanish (Mexico)", "es-MX");
+        TRANSLATE_LANGUAGE_CODES.put("Swahili", "sw");
+        TRANSLATE_LANGUAGE_CODES.put("Swedish", "sv");
+        TRANSLATE_LANGUAGE_CODES.put("Tamil", "ta");
+        TRANSLATE_LANGUAGE_CODES.put("Telugu", "te");
+        TRANSLATE_LANGUAGE_CODES.put("Thai", "th");
+        TRANSLATE_LANGUAGE_CODES.put("Turkish", "tr");
+        TRANSLATE_LANGUAGE_CODES.put("Ukrainian", "uk");
+        TRANSLATE_LANGUAGE_CODES.put("Urdu", "ur");
+        TRANSLATE_LANGUAGE_CODES.put("Uzbek", "uz");
+        TRANSLATE_LANGUAGE_CODES.put("Vietnamese", "vi");
+        TRANSLATE_LANGUAGE_CODES.put("Welsh", "cy");
+    };
+
+    private static final List<String> TRANSLATE_LANGUAGE_LABELS = new ArrayList<>();
+    static {
+        for(String key : TRANSLATE_LANGUAGE_CODES.keySet()) {
+            TRANSLATE_LANGUAGE_LABELS.add(key);
+        }
+    }
 
     public WindowController(Stage primaryStage) {
         client = new TranscribeStreamingClientWrapper();
@@ -209,6 +305,60 @@ public class WindowController {
         saveButton.setDisable(true);
         saveButton.setText("Save Full Transcript");
 
+        HBox translatePane = new HBox();
+        translatePane.setSpacing(20);
+
+        VBox translateFromPane = new VBox();
+        translateFromPane.setSpacing(10);
+        List<String> fromLangList = new ArrayList<>(TRANSLATE_LANGUAGE_LABELS);
+        fromLangList.add(0, "Auto");
+        translateFromLangChoiceBox = new ChoiceBox<>(
+            FXCollections.observableArrayList(fromLangList));
+        translateFromLangChoiceBox.setValue("Auto");
+        translateFromLangChoiceBox.setOnAction(__ -> {
+            if (translateFromLangChoiceBox.getSelectionModel().getSelectedItem().equals("Auto")) {
+                translateFlipLanguageButton.setDisable(true);
+            } else {
+                translateFlipLanguageButton.setDisable(false);
+            }
+        });
+        translateFromTextArea = new TextArea();
+        translateFromTextArea.setWrapText(true);
+        translateFromPane.getChildren().addAll(
+            new HBox(new Text("Source Language: "), translateFromLangChoiceBox),
+            translateFromTextArea);
+        VBox.setVgrow(translateFromTextArea, Priority.ALWAYS);
+
+        translateFlipLanguageButton = new Button("⇄");
+        translateFlipLanguageButton.setDisable(true);
+        translateFlipLanguageButton.setOnAction(__ -> {
+            String from = translateFromLangChoiceBox.getSelectionModel().getSelectedItem();
+            String to = translateToLangChoiceBox.getSelectionModel().getSelectedItem();
+            translateFromLangChoiceBox.setValue(to);
+            translateToLangChoiceBox.setValue(from);
+        });
+
+        VBox translateToPane = new VBox();
+        translateToPane.setSpacing(10);
+        translateToLangChoiceBox = new ChoiceBox<>(
+            FXCollections.observableArrayList(TRANSLATE_LANGUAGE_LABELS));
+        translateToLangChoiceBox.setValue("English");
+        translateToTextArea = new TextArea();
+        translateToTextArea.setWrapText(true);
+        translateToPane.getChildren().addAll(
+            new HBox(new Text("Target Language: "), translateToLangChoiceBox),
+            translateToTextArea);
+        VBox.setVgrow(translateToTextArea, Priority.ALWAYS);
+
+        translatePane.getChildren().addAll(
+            translateFromPane, 
+            translateFlipLanguageButton, 
+            translateToPane);
+        HBox.setHgrow(translateFromPane, Priority.ALWAYS);
+        HBox.setHgrow(translateToPane, Priority.ALWAYS);
+
+        translateButton = new Button("Translate");
+        translateButton.setOnAction(__->{translate();});
         parentPane.getChildren().addAll(
             micPane,
             streamOptionsPane,
@@ -217,9 +367,14 @@ public class WindowController {
             outputTextArea,
             finalText,
             finalTextArea,
-            saveButton);
+            saveButton,
+            new Text("Translate -----"),
+            translatePane,
+            translateButton);
+
         VBox.setVgrow(outputTextArea, Priority.ALWAYS);
         VBox.setVgrow(finalTextArea, Priority.ALWAYS);
+        VBox.setVgrow(translatePane, Priority.ALWAYS);
     }
 
     private void stopTranscription() {
@@ -348,6 +503,40 @@ public class WindowController {
                 });
             }
         };
+    }
+
+    private void translate() {
+        translateButton.setText("Translating...");
+        translateButton.setDisable(true);
+
+        AwsCredentialsProvider credentials = DefaultCredentialsProvider.create();
+        TranslateClient client = new TranslateClient(credentials);
+        String text = translateFromTextArea.getText();
+        String fromLang = translateFromLangChoiceBox.getSelectionModel().getSelectedItem();
+        String toLang = translateToLangChoiceBox.getSelectionModel().getSelectedItem();
+
+        String fromLangCode = TRANSLATE_LANGUAGE_CODES.getOrDefault(fromLang, "auto");
+        String toLangCode = TRANSLATE_LANGUAGE_CODES.getOrDefault(toLang, "en-US");
+
+        CompletableFuture<TranslateTextResponse> result = 
+            client.translate(text, fromLangCode, toLangCode);
+        
+        result.whenCompleteAsync((response, err) -> {
+            Platform.runLater(() -> {
+                translateButton.setText("Translate");
+                translateButton.setDisable(false);
+            });
+
+            if (err != null) {
+                System.out.println("Error!");
+                err.printStackTrace();
+                return;
+            }
+            String translatedText = response.translatedText();
+            Platform.runLater(() -> {
+                translateToTextArea.setText(translatedText);
+            });
+        });
     }
 
 }
